@@ -117,7 +117,7 @@ async def Find_User_By_Coordonates(sctx, coordx, coordy):
     user_embed = User_Embed_Manager(user, neighbors).simple_user_embed(neighbors=True)
 
     await msg.delete()
-    await sctx.send(embed=user_embed, hidden=True)
+    await sctx.send(embed=user_embed)
 
 
 # FIND USER BY USERNAME
@@ -159,7 +159,7 @@ async def find_user_by_username(sctx, usrnm: str):
     user_embed = User_Embed_Manager(user, neighbors)
 
     await msg.delete()
-    await sctx.send(embed=user_embed, hidden=True)
+    await sctx.send(embed=user_embed)
 
 
 # POLL
@@ -483,7 +483,7 @@ options = [
 )
 async def find_neighbors(sctx, coordx, coordy, rayon=1):
     try:
-        user = await get_info_by_coordonates(sctx.guild, [coordx, coordy])
+        user = await Get_User(sctx.guild).get_user_by_coordonates([coordx, coordy])
     except UserErrors.UserNotFound:
         em = Embed(
             title="Cet utilisateur n'a pas pu être trouvé",
@@ -505,71 +505,12 @@ async def find_neighbors(sctx, coordx, coordy, rayon=1):
         await sctx.send(embed=em, hidden=True)
         return
 
-    neighbors = await get_users_in_era(sctx.guild, coord1, coord2)
+    neighbors = await Get_User(sctx.guild).get_users_in_area(coord1, coord2)
 
-    desc = f"**User**: `{user.username}`\n**Discord**: {user.discord_mention}\n**Coordonnées**: `{str(user.coord).replace(', ', ':')}`\n**Region :** {region}\n**Color**: `<<` Couleur de l'embed\n=== **__NEIGHBORS__** ===\n\n"
-    val = ""
-    vals = []
-
-    i = 0
-    for neighbor in neighbors:
-        i += 1
-        n_dict = neighbor
-        try:
-            member_mention = n_dict["mention"]
-        except KeyError:
-            member_mention = "Not Found"
-
-        try:
-            region = n_dict["region"]
-        except KeyError:
-            region = "No Region"
-
-        try:
-            username = n_dict["username"]
-            coord = n_dict["coord"]
-            color = n_dict["color"]
-
-            if len(desc) + 160 < 4000:
-                desc += f"**__Username:__** `{username}`\n**Discord:** {member_mention}\n**Coordonnées:** `{coord}`\n**Region :** {region}\n\n"
-
-            else:
-                if len(val) + 160 < 1000:
-                    val += f"**__Username:__** `{username}`\n**Discord:** {member_mention}\n**Coordonnées:** `{coord}`\n**Region :** {region}\n\n"
-                else:
-                    vals.append(val)
-                    val = ""
-
-        except KeyError:
-            pass
-
-    # USER
-    try:
-        member_mention = user["mention"]
-    except KeyError:
-        member_mention = "Not Found"
-
-    try:
-        region = user["region"]
-    except KeyError:
-        region = "No Region"
-
-    username = user["username"]
-    coord = user["coord"]
-    color = user["color"]
-
-    em = Embed(
-        title=f"User Infos for {username} {str(list(coord)).replace(', ', ':')}",
-        description=desc,
-        timestamp=datetime.datetime.utcnow(),
-        color=color,
-    )
-
-    for val in vals:
-        em.add_field(name="=== **__NEIGHBORS__** ===", value=val)
+    neighbors_embed = User_Embed_Manager(user, neighbors)
 
     await msg.delete()
-    await sctx.send(embed=em, hidden=True)
+    await sctx.send(embed=neighbors_embed)
 
 
 @tasks.loop(hours=1)

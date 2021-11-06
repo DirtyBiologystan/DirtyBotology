@@ -1,6 +1,7 @@
 import json
 from typing import Union
 from errors import UserErrors
+import re
 
 
 class User:
@@ -40,7 +41,7 @@ class User:
 
         if isinstance(identifier, str):
             try:
-                self.user_dict = self.db[self.username]
+                self.user_dict = self.db[self.username.lower()]
                 self.set_attributes(self)
 
             except KeyError:
@@ -71,6 +72,11 @@ class User:
         - None
         ----------
 
+        ## Uses
+        ----
+        - `update_region_and_discord_info()`
+            - Update the discord and region attributes informations
+        ----
 
         ## Returns
         -------
@@ -82,6 +88,7 @@ class User:
             self.iteration = self.user_dict["iter"]
             self.int_color = self.user_dict["color"]
             self.index_in_flag = self.user_dict["indexInFlag"]
+            self.username = self.user_dict["username"]
 
         except KeyError as e:
             raise UserErrors.InvalidDictForm(f"Missing Key: {e.args[0]}")
@@ -134,7 +141,7 @@ class User:
             self.db = json.load(f)
             f.close()
 
-        self.db[self.username] = self.to_dict(self)
+        self.db[self.username.lower()] = self.to_dict(self)
 
         with open("database.json", "w") as f:
             json.dump(self.db, f, indent=4)
@@ -153,46 +160,50 @@ class User:
 
         self.set_attributes(self)
 
+    def coord_match(self, member):
+        member_display_name = member.display_name.lower()
+        member_coord = re.search(".*?[([{]\s*(\d+)\s*[:;,]\s*(\d+)\s*[)}\]].*", member_display_name)
+
+        coord_match = f"[{member_coord.group(1)}:{member_coord.group(2)}]" == str(self.coord)
+
+        return coord_match
+
     def get_discord_user(self, username, coord):
-        potential_member = []
+        high_potential_match = []
+        mid_potential_match = []
+        low_potential_match = []
         username = username.lower()
         for member in self.guild.members:
             member_display_name = member.display_name.lower()
-            if len(set(member_display_name).intersection(username)) > (
-                (len(username) + len(member_display_name)) / 2
-            ) and len(member_display_name) >= len(username):
-                potential_member.append(member)
 
-        if potential_member == []:
-            return None
+            member_coord = re.search(".*?[([{]\s*(\d+)\s*[:;,]\s*(\d+)\s*[)}\]].*", member_display_name)
+            username_match = (username in member_display_name or username in member.name.lower())
+
+            if member_coord is not None:
+                coord_match = self.coord_match(self, member)
+                if coord_match and username_match:
+                    high_potential_match.append(member)
+                elif username_match:
+                    mid_potential_match.append(member)
+                elif coord_match:
+                    low_potential_match.append()
+            else:
+                return None, None
+
+        if high_potential_match != []:
+            match_list = sorted(high_potential_match, key=lambda x: (username in x.display_name.lower() or username in x.name.lower()) and coord_match(self, x))
+            return match_list[0], "HIGH"
+
+        elif mid_potential_match != []:
+            match_list = sorted(mid_potential_match, key=lambda x: coord_match(self, x))
+            return match_list[0], "MEDIUM"
+
+        elif low_potential_match != []:
+            match_list = sorted(low_potential_match, key=lambda x: username in x.display_name.lower() or username in x.name.lower())
+            return match_list[0], "LOW"
 
         else:
-            member_list = list(
-                filter(
-                    lambda x: (
-                        username in x.display_name.lower() and str(list(coord)) in x.display_name.lower()
-                    )
-                    or (username == x.display_name.lower())
-                    or (username in x.display_name.lower())
-                    or (str(list(coord)) in x.display_name.lower()),
-                    potential_member,
-                )
-            )
-
-            member_list = sorted(
-                member_list,
-                key=lambda x: (
-                    username in x.display_name.lower() and str(list(coord)) in x.display_name.lower()
-                )
-                or (username == x.display_name.lower())
-                or (username in x.display_name.lower())
-                or (str(list(coord)) in x.display_name.lower()),
-            )
-
-            if member_list == []:
-                return None
-
-        return member_list[0]
+            return None, None
 
     def get_user_region(self, coord: list) -> str:
         with open("regions.json", "r") as f:
@@ -219,10 +230,10 @@ class User:
     def update_region_and_discord_info(self):
         if "member_id" not in list(self.user_dict.keys()):
             try:
-                discord_member = self.get_discord_user(self.username, self.coord)
+                discord_member, match_chance = self.get_discord_user(self.username, self.coord)
 
                 self.discord_id = discord_member.id
-                self.discord_mention = discord_member.mention
+                self.discord_mention = f"{discord_member.mention} | **Match chances:** {match_chance}"
                 self.store(self)
             except AttributeError:
                 pass
